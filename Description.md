@@ -24,7 +24,7 @@
 ## Task 2 Procfs Monitoring and File Descriptor Limits
 
 ### Subtask 1: Writing `main.cpp`
-#### How I tested:
+### How I tested:
 1. create file `main.cpp`
 2. compilation `g++ main.cpp -o main` 
 3. execution `./main &` - to run in the background
@@ -50,7 +50,7 @@
 ---
 
 ### Subtask 2: Writing `files.cpp`
-#### How I tested:
+### How I tested:
 1. create file `files.cpp`
 2. compile and run  `g++ files.cpp -o files` -> `./files` + PID of process
 ![alt text](<Screenshot 2025-03-29 at 13.13.37.png>)
@@ -61,7 +61,7 @@
 ---
 
 #### Subtask 3: Writing `file_limit.cpp`
-#### How I tested:
+### How I tested:
 1. create file `file_limit.cpp`
 2. compile and run  `g++ file_limit.cpp -o file_limit` -> `./file_limit`
 3. Current file descriptor limit `/proc/sys/fs/file-max`. It is `9223372036854775807`
@@ -76,3 +76,21 @@
 ![alt text](<Screenshot 2025-03-29 at 13.48.38.png>)
 - System FD exhaustion: `cat /proc/sys/fs/file-nr`
 ![alt text](<Screenshot 2025-03-29 at 13.49.49.png>)
+
+---
+
+## **Task 3: Bootloader for KaguOS**
+### How I tested:
+1. create file `check_file.kga`
+2. run `./asm.sh src/01_stack.kga src/02_fs.kga practice7/check_file.kga`
+3. `./bootloader build/kernel.disk 1500`
+4. then enter filenames (then i have some problem...)
+---
+
+## **Bonus Task: Render Colored Line with AArch64 Assembly**
+### How I tested:
+1. create new file on VM `nano colors.S`
+2. aasemble `aarch64-linux-gnu-as -o colors.o colors.S`
+3. link `aarch64-linux-gnu-ld -o colors colors.o`
+3. run `./colors` 
+4. input valid letters and check magic
