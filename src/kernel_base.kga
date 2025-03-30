@@ -65,6 +65,9 @@ cpu_exec
     var catStr
     write "cat" to var:catStr
 
+    var checkStr
+    write "check" to var:checkStr
+
 label kernel_start
     // Display prompt to enter the value:
     copy var:sys_work_dir to DISPLAY_BUFFER
@@ -97,6 +100,15 @@ label kernel_start
     cpu_exec
     copy REG_RES to var:parsedArg1
 
+    // Get second argument of the command
+    var parsedArg2
+    copy KEYBOARD_BUFFER to REG_A
+    write 3 to REG_B
+    write " " to REG_C
+    write OP_GET_COLUMN to REG_OP
+    cpu_exec
+    copy REG_RES to var:parsedArg2
+
     // Display a message with the first component of input:
     write "Parsed command:" to DISPLAY_BUFFER
     write "" to DISPLAY_COLOR
@@ -121,6 +133,12 @@ label kernel_start
     write OP_CMP_EQ to REG_OP
     cpu_exec
     jump_if label:cat_command
+
+    copy var:parsedStr to REG_A
+    copy var:checkStr to REG_B
+    write OP_CMP_EQ to REG_OP
+    cpu_exec
+    jump_if label:check_command
 
     jump label:kernel_start
 
@@ -175,6 +193,156 @@ label cat_command
     label cat_command_close
         // Let's close file
         copy var:cat_command_file_desc to REG_A
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_close
+        jump label:kernel_start
+
+label check_command
+    var line_num // Current line number being compared
+    var line1 // Content from first file
+    var line2 // Content from second file
+
+    copy var:parsedArg1 to REG_A
+    write "" to REG_B
+    write OP_CMP_EQ to REG_OP
+    cpu_exec
+    jump_if label:kernel_start
+
+    copy var:parsedArg2 to REG_A
+    write "" to REG_B
+    write OP_CMP_EQ to REG_OP
+    cpu_exec
+    jump_if label:kernel_start
+
+    // let's open file1:
+    var check_command_file1_desc
+    copy var:parsedArg1 to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_open
+    jump_err label:error_open_file
+    copy REG_RES to var:check_command_file1_desc
+
+    copy var:check_command_file1_desc to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_descriptor_info
+    copy REG_RES to DISPLAY_BUFFER
+    write OP_DISPLAY_LN to REG_OP
+    cpu_exec
+
+    // let's open file2:
+    var check_command_file2_desc
+    copy var:parsedArg2 to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_open
+    jump_err label:error_open_file
+    copy REG_RES to var:check_command_file2_desc
+
+    copy var:check_command_file2_desc to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_descriptor_info
+    copy REG_RES to DISPLAY_BUFFER
+    write OP_DISPLAY_LN to REG_OP
+    cpu_exec
+
+    write 1 to var:line_num
+    label compare_loop
+        // Read line from file1
+        copy var:check_command_file1_desc to REG_A
+        copy var:line_num to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:file1_read_error
+
+        copy REG_RES to var:line1
+
+        // Read line from file2
+        copy var:check_command_file2_desc to REG_A
+        copy var:line_num to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:file2_read_error
+
+        copy REG_RES to var:line2
+
+        // Compare lines:
+        copy var:line1 to REG_A
+        copy var:line2 to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if_not label:lines_different
+
+        // Check if files have reached end
+        copy var:line1 to REG_A
+        write "" to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if label:files_equal
+
+        copy var:line2 to REG_A
+        write "" to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if label:files_equal
+
+        // Increment line number
+        copy var:line_num to REG_A
+        write OP_INCR to REG_OP
+        cpu_exec
+        copy REG_RES to var:line_num
+        jump label:compare_loop
+
+    // files are the same
+    label files_equal
+        write "Files are the same" to DISPLAY_BUFFER
+        write COLOR_GREEN to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:check_command_close
+
+    // Lines are different, let's print the line number
+    label lines_different
+        write "Files are different at line number: " to DISPLAY_BUFFER
+        write COLOR_RED to DISPLAY_COLOR
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+
+        copy var:line_num to DISPLAY_BUFFER
+        write COLOR_RED to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:check_command_close
+
+    // Error reading file1
+    label file1_read_error
+        write "Error occured! Failed to read from file1" to DISPLAY_BUFFER
+        write COLOR_RED to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:check_command_close
+
+    // Error reading file
+    label file2_read_error
+        write "Error occured! Failed to read from file2" to DISPLAY_BUFFER
+        write COLOR_RED to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:check_command_close
+
+    label error_open_file
+        write "Error occured! Check file existance!" to DISPLAY_BUFFER
+        write COLOR_RED to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:check_command_close
+
+    label check_command_close
+        // Let's close file
+        copy var:check_command_file1_desc to REG_A
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_close
+
+         // Let's close file
+        copy var:check_command_file2_desc to REG_A
         copy PROGRAM_COUNTER to var:sys_return
         jump label:sys_fs_close
         jump label:kernel_start
