@@ -1,0 +1,259 @@
+label kernel_entry_point
+
+var filename1
+var filename2
+var line_num // Current line number being compared
+var line1 // Content from first file
+var line2 // Content from second file
+var file1_desc // File descriptor for first file
+var file2_desc // File descriptor for second file
+var temp // Temporary variable for operations
+
+label start
+     write "Enter first filename: " to DISPLAY_BUFFER
+    write COLOR_GREEN to DISPLAY_COLOR
+    write OP_DISPLAY to REG_OP
+    cpu_exec
+
+    write KEYBOARD_READ_LINE to REG_A
+    write OP_READ_INPUT to REG_OP
+    cpu_exec
+    copy KEYBOARD_BUFFER to var:filename1
+
+    write "Enter second filename: " to DISPLAY_BUFFER
+    write COLOR_GREEN to DISPLAY_COLOR
+    write OP_DISPLAY to REG_OP
+    cpu_exec
+
+    write KEYBOARD_READ_LINE to REG_A
+    write OP_READ_INPUT to REG_OP
+    cpu_exec
+    copy KEYBOARD_BUFFER to var:filename2
+    
+    // Open first file using sys_fs_open
+    copy var:filename1 to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_open
+    jump_err label:file1_open_error
+    copy REG_RES to var:file1_desc
+
+    // Open second file using sys_fs_open
+    copy var:filename2 to REG_A
+    copy PROGRAM_COUNTER to var:sys_return
+    jump label:sys_fs_open
+    jump_err label:file2_open_error
+    copy REG_RES to var:file2_desc
+
+    write 1 to var:line_num
+
+    label compare_loop
+        copy var:file1_desc to REG_A
+        copy var:line_num to REG_B
+        jump_err label:file1_read_error
+        copy REG_RES to var:line1
+        
+        copy var:file2_desc to REG_A
+        copy var:line_num to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:file2_read_error
+        jump label:sys_fs_read
+        jump_err label:check_file1_end
+        copy REG_RES to var:line2
+
+        // Compare two lines
+        copy var:line1 to REG_A
+        copy var:line2 to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if_not label:diff_found  // Jump if lines differ
+
+        // Check if reached end of file 1
+        copy var:line1 to REG_A
+        write "" to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if label:check_file2_end
+
+        // Increment line counter for next iteration
+        copy var:line_num to REG_A
+        write OP_INCR to REG_OP
+        cpu_exec
+        copy REG_RES to var:line_num
+        jump label:compare_loop
+
+    // Check if file2 has more content when file1 ended
+    label check_file2_end
+        copy var:file2_desc to REG_A
+        copy var:line_num to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:files_identical
+        
+        copy REG_RES to REG_A
+        write "" to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if label:files_identical
+
+        // Second file is longer
+        write "Files differ: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename1 to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        write " ended before " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename2 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:cleanup
+
+    // Check if file1 has more content when file2 ended
+    label check_file1_end
+        copy var:file1_desc to REG_A
+        copy var:line_num to REG_B
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_read
+        jump_err label:files_identical
+        
+        copy REG_RES to REG_A
+        write "" to REG_B
+        write OP_CMP_EQ to REG_OP
+        cpu_exec
+        jump_if label:files_identical
+
+        // First file is longer
+        write "Files differ: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename2 to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        write " ended before " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename1 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:cleanup
+
+    // Files are identical
+    label files_identical
+        write "Files are identical" to DISPLAY_BUFFER
+        write COLOR_GREEN to DISPLAY_COLOR
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:cleanup
+
+    // Difference found between files
+    label diff_found
+        write "Files differ at line " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:line_num to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        write ":" to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+
+        // Display the differing line from first file
+        write "File 1: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:line1 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+
+        // Display the differing line from second file
+        write "File 2: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:line2 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:cleanup
+
+    label file2_error
+        copy var:file1_desc to REG_A
+        write 0 to REG_B
+        cpu_exec
+        jump_if label:close_file1_before_error
+        
+        label after_file1_close
+        write "Error reading file: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename2 to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        write ": " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy REG_ERROR to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:exit
+
+        label close_file1_before_error
+            copy var:file1_desc to REG_A
+            copy PROGRAM_COUNTER to var:sys_return
+            jump label:sys_fs_close
+            
+    // Handle file1 open error
+    label file1_open_error
+        write "Error opening file: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename1 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:exit
+
+    // Handle file2 open error
+    label file2_open_error
+        write "Error opening file: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename2 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:exit
+
+    // Handle file1 read error
+    label file1_read_error
+        write "Error reading file: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename1 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:cleanup
+
+    // Handle file2 read error
+    label file2_read_error
+        write "Error reading file: " to DISPLAY_BUFFER
+        write OP_DISPLAY to REG_OP
+        cpu_exec
+        copy var:filename2 to DISPLAY_BUFFER
+        write OP_DISPLAY_LN to REG_OP
+        cpu_exec
+        jump label:cleanup
+
+    // Close both files
+    label cleanup
+        copy var:file1_desc to REG_A
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_close
+
+        copy var:file2_desc to REG_A
+        copy PROGRAM_COUNTER to var:sys_return
+        jump label:sys_fs_close
+
+    // Program exit point
+    label exit
+        write OP_HALT to REG_OP
+        cpu_exec
